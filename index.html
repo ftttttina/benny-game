@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Downward Descent</title>
+    <style>
+        body { margin: 0; overflow: hidden; background: #333; font-family: sans-serif; touch-action: none; }
+        canvas { display: block; background: #87CEEB; margin: 0 auto; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 20px; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="ui">Lives: <span id="lives">3</span> | Score: <span id="score">0</span></div>
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const livesDisplay = document.getElementById('lives');
+const scoreDisplay = document.getElementById('score');
+
+// Game Settings
+let lives = 3;
+let score = 0;
+let gameActive = true;
+const gravity = 0.5;
+const platformSpeed = 1.5;
+const walkSpeed = 5;
+const fallSpeedMultiplier = 0.8; // 0.2 slower = 80% speed
+
+// Player Object
+const player = {
+    x: 0, y: 0, w: 30, h: 30,
+    vx: 0, vy: 0,
+    grounded: false,
+    color: '#FF5733'
+};
+
+let platforms = [];
+let keys = {};
+let touchStartX = 0;
+
+function init() {
+    canvas.width = window.innerWidth > 500 ? 400 : window.innerWidth;
+    canvas.height = window.innerHeight;
+    player.x = canvas.width / 2;
+    player.y = canvas.height / 2;
+    platforms = [];
+    // Initial platforms
+    for(let i=0; i<6; i++) {
+        spawnPlatform(canvas.height / 6 * i + 100);
+    }
+    requestAnimationFrame(update);
+}
+
+function spawnPlatform(yPos) {
+    const gap = 80;
+    platforms.push({
+        x: Math.random() * (canvas.width - gap),
+        y: yPos || canvas.height,
+        w: gap,
+        h: 15
+    });
+}
+
+// Input Listeners
+window.addEventListener('keydown', (e) => keys[e.code] = true);
+window.addEventListener('keyup', (e) => keys[e.code] = false);
+
+// Swipe Logic for iPhone
+window.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+window.addEventListener('touchmove', e => {
+    const touchX = e.touches[0].clientX;
+    const diff = touchX - touchStartX;
+    player.vx = diff > 0 ? walkSpeed : -walkSpeed;
+    e.preventDefault();
+}, { passive: false });
+window.addEventListener('touchend', () => { player.vx = 0; });
+
+function update() {
+    if (!gameActive) return;
+
+    // Movement Logic
+    let currentSpeed = player.grounded ? walkSpeed : walkSpeed * fallSpeedMultiplier;
+    
+    if (keys['ArrowLeft']) player.vx = -currentSpeed;
+    else if (keys['ArrowRight']) player.vx = currentSpeed;
+    else if (!window.ontouchstart) player.vx *= 0.8; // Friction for desktop
+
+    player.vy += gravity;
+    player.x += player.vx;
+    player.y += player.vy;
+
+    // Screen Bounds
+    if (player.x < 0) player.x = 0;
+    if (player.x + player.w > canvas.width) player.x = canvas.width - player.w;
+
+    // Platform Logic
+    player.grounded = false;
+    platforms.forEach((p, index) => {
+        p.y -= platformSpeed; // Move platforms up
+
+        // Collision Detection
+        if (player.vy > 0 && 
+            player.x < p.x + p.w && player.x + player.w > p.x &&
+            player.y + player.h > p.y && player.y + player.h < p.y + p.h + player.vy) {
+            player.y = p.y - player.h;
+            player.vy = 0;
+            player.grounded = true;
+        }
+
+        // Recycle platforms
+        if (p.y < -20) {
+            platforms.splice(index, 1);
+            spawnPlatform();
+            score++;
+            scoreDisplay.innerText = score;
+        }
+    });
+
+    // Death Conditions
+    // 1. Spikes at top
+    if (player.y <= 0) handleDeath();
+    // 2. Falling off bottom
+    if (player.y > canvas.height) handleDeath();
+
+    draw();
+    requestAnimationFrame(update);
+}
+
+function handleDeath() {
+    lives--;
+    livesDisplay.innerText = lives;
+    if (lives <= 0) {
+        alert("Game Over! Score: " + score);
+        lives = 3;
+        score = 0;
+        livesDisplay.innerText = lives;
+        scoreDisplay.innerText = score;
+    }
+    player.y = canvas.height / 2;
+    player.vy = 0;
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw Spikes
+    ctx.fillStyle = "red";
+    for(let i=0; i<canvas.width; i+=20) {
+        ctx.beginPath();
+        ctx.moveTo(i, 0);
+        ctx.lineTo(i+10, 20);
+        ctx.lineTo(i+20, 0);
+        ctx.fill();
+    }
+
+    // Draw Player
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+
+    // Draw Platforms
+    ctx.fillStyle = "#222";
+    platforms.forEach(p => {
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+    });
+}
+
+init();
+</script>
+</body>
+</html>
