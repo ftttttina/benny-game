@@ -1,107 +1,140 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-Hant">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Downward Descent</title>
+    <title>Benny's Game</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #333; font-family: sans-serif; touch-action: none; }
-        canvas { display: block; background: #87CEEB; margin: 0 auto; }
-        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 20px; pointer-events: none; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; touch-action: none; }
+        canvas { display: block; background: #2c3e50; margin: 0 auto; }
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 18px; pointer-events: none; text-shadow: 2px 2px 4px #000; z-index: 10; display: none; }
+        
+        /* 啟動選單與黑屏 */
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
+        #startBtn { padding: 15px 40px; font-size: 24px; cursor: pointer; background: #e74c3c; color: white; border: none; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: 0.3s; }
+        #startBtn:hover { background: #c0392b; transform: scale(1.1); }
+        #deathScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; display: none; z-index: 30; }
     </style>
 </head>
 <body>
+
     <div id="ui">Lives: <span id="lives">3</span> | Score: <span id="score">0</span></div>
+    
+    <div id="overlay">
+        <h1 style="color: white; margin-bottom: 20px;">Benny's Game</h1>
+        <button id="startBtn">START GAME</button>
+    </div>
+
+    <div id="deathScreen"></div>
+
     <canvas id="gameCanvas"></canvas>
 
 <script>
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
-const livesDisplay = document.getElementById('lives');
-const scoreDisplay = document.getElementById('score');
+const ui = document.getElementById('ui');
+const overlay = document.getElementById('overlay');
+const startBtn = document.getElementById('startBtn');
+const deathScreen = document.getElementById('deathScreen');
 
-// Game Settings
-let lives = 3;
-let score = 0;
-let gameActive = true;
+// 遊戲變數
+let lives, score, gameActive, currentPlatformSpeed;
 const gravity = 0.5;
-const platformSpeed = 1.5;
-const walkSpeed = 5;
-const fallSpeedMultiplier = 0.8; // 0.2 slower = 80% speed
-
-// Player Object
-const player = {
-    x: 0, y: 0, w: 30, h: 30,
-    vx: 0, vy: 0,
-    grounded: false,
-    color: '#FF5733'
-};
-
+const baseWalkSpeed = 5;
+const fallMultiplier = 0.8;
 let platforms = [];
 let keys = {};
 let touchStartX = 0;
 
-function init() {
+const player = {
+    x: 0, y: 0, w: 25, h: 25,
+    vx: 0, vy: 0, grounded: false, color: '#f1c40f'
+};
+
+// 初始化/重置遊戲
+function resetGame() {
+    lives = 3;
+    score = 0;
+    currentPlatformSpeed = 1.5; // 初始速度
+    gameActive = true;
+    platforms = [];
+    
     canvas.width = window.innerWidth > 500 ? 400 : window.innerWidth;
     canvas.height = window.innerHeight;
+    
     player.x = canvas.width / 2;
     player.y = canvas.height / 2;
-    platforms = [];
-    // Initial platforms
+    
+    // 生成初始平台
     for(let i=0; i<6; i++) {
-        spawnPlatform(canvas.height / 6 * i + 100);
+        spawnPlatform(canvas.height / 6 * i + 150);
     }
+    
+    document.getElementById('lives').innerText = lives;
+    document.getElementById('score').innerText = score;
+    ui.style.display = 'block';
+    overlay.style.display = 'none';
+    deathScreen.style.display = 'none';
+    
     requestAnimationFrame(update);
 }
 
 function spawnPlatform(yPos) {
-    const gap = 80;
+    // 難度隨機化：平台長度隨分數增加而變短
+    const minWidth = 60;
+    const maxWidth = Math.max(minWidth, 200 - (score * 2)); 
+    const pWidth = Math.random() * (maxWidth - minWidth) + minWidth;
+    
+    // 確保一定會有空隙 (Canvas 寬度 - 平台寬度)
+    const maxX = canvas.width - pWidth;
+    
     platforms.push({
-        x: Math.random() * (canvas.width - gap),
+        x: Math.random() * maxX,
         y: yPos || canvas.height,
-        w: gap,
-        h: 15
+        w: pWidth,
+        h: 12
     });
 }
 
-// Input Listeners
-window.addEventListener('keydown', (e) => keys[e.code] = true);
-window.addEventListener('keyup', (e) => keys[e.code] = false);
+// 控制邏輯
+startBtn.addEventListener('click', resetGame);
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
 
-// Swipe Logic for iPhone
 window.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
 window.addEventListener('touchmove', e => {
-    const touchX = e.touches[0].clientX;
-    const diff = touchX - touchStartX;
-    player.vx = diff > 0 ? walkSpeed : -walkSpeed;
+    const diff = e.touches[0].clientX - touchStartX;
+    player.vx = diff > 0 ? baseWalkSpeed : -baseWalkSpeed;
     e.preventDefault();
 }, { passive: false });
-window.addEventListener('touchend', () => { player.vx = 0; });
+window.addEventListener('touchend', () => player.vx = 0);
 
 function update() {
     if (!gameActive) return;
 
-    // Movement Logic
-    let currentSpeed = player.grounded ? walkSpeed : walkSpeed * fallSpeedMultiplier;
-    
-    if (keys['ArrowLeft']) player.vx = -currentSpeed;
-    else if (keys['ArrowRight']) player.vx = currentSpeed;
-    else if (!window.ontouchstart) player.vx *= 0.8; // Friction for desktop
+    // 隨時間增加難度 (上升速度)
+    currentPlatformSpeed += 0.0005;
+
+    // 移動邏輯
+    let moveSpeed = player.grounded ? baseWalkSpeed : baseWalkSpeed * fallMultiplier;
+    if (keys['ArrowLeft']) player.vx = -moveSpeed;
+    else if (keys['ArrowRight']) player.vx = moveSpeed;
+    else if (!('ontouchstart' in window)) player.vx *= 0.7; // 桌面端摩擦力
 
     player.vy += gravity;
-    player.x += player.vx;
     player.y += player.vy;
+    player.x += player.vx;
 
-    // Screen Bounds
+    // 牆壁碰撞
     if (player.x < 0) player.x = 0;
     if (player.x + player.w > canvas.width) player.x = canvas.width - player.w;
 
-    // Platform Logic
+    // 平台邏輯
     player.grounded = false;
-    platforms.forEach((p, index) => {
-        p.y -= platformSpeed; // Move platforms up
+    platforms.forEach((p, i) => {
+        p.y -= currentPlatformSpeed;
 
-        // Collision Detection
+        // 碰撞檢測 (踩在平台上)
         if (player.vy > 0 && 
             player.x < p.x + p.w && player.x + player.w > p.x &&
             player.y + player.h > p.y && player.y + player.h < p.y + p.h + player.vy) {
@@ -110,64 +143,68 @@ function update() {
             player.grounded = true;
         }
 
-        // Recycle platforms
+        // 循環生成平台
         if (p.y < -20) {
-            platforms.splice(index, 1);
+            platforms.splice(i, 1);
             spawnPlatform();
             score++;
-            scoreDisplay.innerText = score;
+            document.getElementById('score').innerText = score;
         }
     });
 
-    // Death Conditions
-    // 1. Spikes at top
-    if (player.y <= 0) handleDeath();
-    // 2. Falling off bottom
-    if (player.y > canvas.height) handleDeath();
+    // 死亡判斷
+    if (player.y <= 20 || player.y > canvas.height) {
+        handleLifeLoss();
+    }
 
     draw();
-    requestAnimationFrame(update);
+    if (gameActive) requestAnimationFrame(update);
 }
 
-function handleDeath() {
+function handleLifeLoss() {
     lives--;
-    livesDisplay.innerText = lives;
+    document.getElementById('lives').innerText = lives;
+    
     if (lives <= 0) {
-        alert("Game Over! Score: " + score);
-        lives = 3;
-        score = 0;
-        livesDisplay.innerText = lives;
-        scoreDisplay.innerText = score;
+        gameActive = false;
+        showDeathEffect();
+    } else {
+        // 扣血後閃爍重置位置
+        player.y = canvas.height / 2;
+        player.vy = 0;
     }
-    player.y = canvas.height / 2;
-    player.vy = 0;
+}
+
+function showDeathEffect() {
+    deathScreen.style.display = 'block';
+    setTimeout(() => {
+        deathScreen.style.display = 'none';
+        overlay.style.display = 'flex';
+        ui.style.display = 'none';
+    }, 1000); // 黑色螢幕停留 1 秒
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // Draw Spikes
-    ctx.fillStyle = "red";
+    // 繪製頂部尖刺
+    ctx.fillStyle = "#e74c3c";
     for(let i=0; i<canvas.width; i+=20) {
         ctx.beginPath();
-        ctx.moveTo(i, 0);
-        ctx.lineTo(i+10, 20);
-        ctx.lineTo(i+20, 0);
+        ctx.moveTo(i, 0); ctx.lineTo(i+10, 20); ctx.lineTo(i+20, 0);
         ctx.fill();
     }
 
-    // Draw Player
-    ctx.fillStyle = player.color;
-    ctx.fillRect(player.x, player.y, player.w, player.h);
-
-    // Draw Platforms
-    ctx.fillStyle = "#222";
+    // 繪製平台
+    ctx.fillStyle = "#ecf0f1";
     platforms.forEach(p => {
         ctx.fillRect(p.x, p.y, p.w, p.h);
     });
-}
 
-init();
+    // 繪製主角
+    ctx.fillStyle = player.color;
+    ctx.fillRect(player.x, player.y, player.w, player.h);
+}
 </script>
 </body>
 </html>
