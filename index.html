@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Benny's Snowman World - Apple Power</title>
+    <title>Benny's Snowman World - Pro</title>
     <style>
         :root {
             --bg-color-top: #051937;
@@ -20,8 +20,6 @@
         #ui { position: absolute; top: 15px; left: 15px; display: none; z-index: 10; pointer-events: none; }
         #scoreDisplay { color: white; font-size: 20px; font-weight: bold; text-shadow: 1px 1px 3px #000; margin-bottom: 5px; }
         #heartsContainer { display: flex; gap: 5px; }
-        
-        /* 🍎 蘋果倒數樣式 */
         #appleTimer { color: #ffd700; font-size: 18px; font-weight: bold; display: none; margin-top: 5px; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
 
         #countdown { 
@@ -30,20 +28,22 @@
             text-shadow: 0 0 20px rgba(34, 211, 238, 0.8);
         }
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
-        #cameraContainer { width: 150px; height: 150px; border-radius: 50%; overflow: hidden; border: 3px solid rgba(255,255,255,0.5); margin-bottom: 20px; background: #333; }
+        #cameraContainer { width: 140px; height: 140px; border-radius: 50%; overflow: hidden; border: 3px solid rgba(255,255,255,0.5); margin-bottom: 20px; background: #333; }
         #videoFeed { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        .btn-group { display: flex; flex-direction: column; gap: 15px; width: 200px; }
+        .btn-group { display: flex; flex-direction: column; gap: 12px; width: 220px; }
         button { 
-            padding: 14px 20px; font-size: 16px; cursor: pointer; 
-            color: white; border-radius: 15px;
+            padding: 12px 15px; font-size: 15px; cursor: pointer; 
+            color: white; border-radius: 12px;
             background: rgba(255, 255, 255, 0.1); 
             border: 1px solid rgba(255, 255, 255, 0.25);
             backdrop-filter: blur(15px);
             -webkit-backdrop-filter: blur(15px);
-            transition: 0.3s;
+            transition: 0.2s;
             font-weight: 500;
         }
-        #startBtn { background: rgba(34, 211, 238, 0.2); border-color: rgba(34, 211, 238, 0.5); }
+        button:active { transform: scale(0.98); }
+        #startBtn { background: rgba(34, 211, 238, 0.3); border-color: rgba(34, 211, 238, 0.6); font-weight: bold; margin-top: 5px; }
+        #bennyBtn { background: rgba(255, 215, 0, 0.15); border-color: rgba(255, 215, 0, 0.4); }
     </style>
 </head>
 <body>
@@ -55,10 +55,11 @@
     </div>
     <div id="countdown">3</div>
     <div id="overlay">
-        <h2 style="color: white; margin-bottom: 20px; font-weight: 300;">ICE WORLD</h2>
+        <h2 style="color: white; margin-bottom: 15px; font-weight: 300; letter-spacing: 1px;">SNOWMAN WORLD</h2>
         <div id="cameraContainer"><video id="videoFeed" autoplay playsinline></video></div>
         <div class="btn-group">
             <button id="snapBtn">📸 Take a Pic</button>
+            <button id="bennyBtn">🐻 I use Benny</button>
             <button id="startBtn">🎮 Start Game</button>
         </div>
     </div>
@@ -73,16 +74,16 @@ const overlay = document.getElementById('overlay');
 const video = document.getElementById('videoFeed');
 const photoCanvas = document.getElementById('photoCanvas');
 const snapBtn = document.getElementById('snapBtn');
+const bennyBtn = document.getElementById('bennyBtn');
 const startBtn = document.getElementById('startBtn');
 const countdownEl = document.getElementById('countdown');
 const heartsContainer = document.getElementById('heartsContainer');
 const appleTimerEl = document.getElementById('appleTimer');
 const shieldSecondsEl = document.getElementById('shieldSeconds');
 
-// 音效
 const dropSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2004/2004-preview.mp3'); 
 const hitSound = new Audio('https://assets.mixkit.co/active_storage/sfx/2012/2012-preview.mp3');
-const powerUpSound = new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3'); // 獎勵音效
+const powerUpSound = new Audio('https://assets.mixkit.co/active_storage/sfx/1435/1435-preview.mp3');
 
 const bgSchemes = [
     { top: '#051937', mid: '#004d7a', bottom: '#008793' },
@@ -92,7 +93,7 @@ const bgSchemes = [
 
 let playerImg = null, lives, score, gameActive, currentPlatformSpeed;
 let platforms = [], ceilingIcicles = [], snowflakes = [], apples = [], lastDropTime = 0;
-let shieldTime = 0; // 🛡️ 剩餘保護時間
+let shieldTime = 0; 
 const dropInterval = 2000, maxLives = 5, gravity = 0.5, baseWalkSpeed = 6;
 const mobileSensitivity = 0.15; 
 let keys = {}, touchStartX = 0;
@@ -112,7 +113,16 @@ snapBtn.addEventListener('click', () => {
     pCtx.drawImage(video, 0, 0, 100, 100); pCtx.restore();
     playerImg = new Image();
     playerImg.src = photoCanvas.toDataURL('image/png');
-    snapBtn.innerText = "✅ Ready!";
+    snapBtn.innerText = "✅ Pic Ready!";
+    bennyBtn.innerText = "🐻 I use Benny"; // 重置另一個按鈕狀態
+});
+
+// --- I use Benny 功能 ---
+bennyBtn.addEventListener('click', () => {
+    playerImg = new Image();
+    playerImg.src = 'your_face.jpg'; // 使用你的指定路徑
+    bennyBtn.innerText = "✅ Benny Selected!";
+    snapBtn.innerText = "📸 Take a Pic"; // 重置另一個按鈕狀態
 });
 
 startBtn.addEventListener('click', () => {
@@ -162,9 +172,8 @@ function update() {
     if (!gameActive) return;
     currentPlatformSpeed += 0.0004;
 
-    // 🛡️ 保護時間邏輯
     if (shieldTime > 0) {
-        shieldTime -= 1/60; // 每一幀減少時間 (約 60fps)
+        shieldTime -= 1/60;
         appleTimerEl.style.display = 'block';
         shieldSecondsEl.innerText = Math.ceil(shieldTime);
     } else {
@@ -197,11 +206,10 @@ function update() {
         if (p.y < -20) { platforms.splice(i, 1); spawnPlatform(); score++; document.getElementById('score').innerText = score; }
     });
 
-    // 🍎 蘋果邏輯
+    // 🍎 蘋果碰撞邏輯 (稍微加大碰撞體積 30x30)
     apples.forEach((a, i) => {
         a.y -= currentPlatformSpeed;
-        // 碰撞檢測
-        if (player.x < a.x + 20 && player.x + player.w > a.x && player.y < a.y + 20 && player.y + player.h > a.y) {
+        if (player.x < a.x + 30 && player.x + player.w > a.x && player.y < a.y + 30 && player.y + player.h > a.y) {
             shieldTime = 10;
             powerUpSound.currentTime = 0; powerUpSound.play().catch(()=>{});
             apples.splice(i, 1);
@@ -224,12 +232,8 @@ function update() {
         if(ic.isDropping) {
             ic.y = (ic.y || 0) + ic.speed;
             if (ic.x < player.x + player.w && ic.x + ic.w > player.x && (ic.y || 0) < player.y + player.h && (ic.y || 0) + ic.h > player.y) {
-                if (shieldTime > 0) {
-                    // 🛡️ 有盾牌，冰錐碎掉
-                    ic.isDropping = false; ic.y = 0;
-                } else {
-                    handleLifeLoss(); ic.isDropping = false; ic.y = 0;
-                }
+                if (shieldTime > 0) { ic.isDropping = false; ic.y = 0; }
+                else { handleLifeLoss(); ic.isDropping = false; ic.y = 0; }
             }
             if ((ic.y || 0) > canvas.height) { ic.isDropping = false; ic.y = 0; }
         }
@@ -247,7 +251,7 @@ function update() {
 }
 
 function handleLifeLoss() {
-    if (shieldTime > 0) return; // 二次保障
+    if (shieldTime > 0) return;
     lives--; updateHeartsUI();
     hitSound.currentTime = 0; hitSound.play().catch(() => {});
     if (lives <= 0) { gameActive = false; location.reload(); }
@@ -256,27 +260,22 @@ function handleLifeLoss() {
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // 雪花
     ctx.fillStyle = "rgba(255,255,255,0.25)";
     snowflakes.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill(); });
-
-    // 平台
     platforms.forEach(p => {
         let grad = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
         grad.addColorStop(0, '#a5f3fc'); grad.addColorStop(1, '#22d3ee');
         ctx.fillStyle = grad; ctx.fillRect(p.x, p.y, p.w, p.h);
     });
 
-    // 🍎 繪製蘋果
+    // 🍎 繪製大蘋果 (半徑從 8 增加到 12)
     apples.forEach(a => {
-        ctx.fillStyle = "#ff4d4d"; // 蘋果紅
-        ctx.beginPath(); ctx.arc(a.x + 10, a.y + 10, 8, 0, Math.PI*2); ctx.fill();
-        ctx.fillStyle = "#4ade80"; // 葉子綠
-        ctx.fillRect(a.x + 8, a.y, 4, 4);
+        ctx.fillStyle = "#ff4d4d"; 
+        ctx.beginPath(); ctx.arc(a.x + 12, a.y + 12, 12, 0, Math.PI*2); ctx.fill();
+        ctx.fillStyle = "#4ade80"; 
+        ctx.fillRect(a.x + 10, a.y - 2, 4, 6);
     });
 
-    // 冰錐
     ceilingIcicles.forEach(ic => {
         let drawY = ic.isDropping ? ic.y : 0;
         let centerX = ic.x + ic.w / 2;
@@ -285,16 +284,12 @@ function draw() {
         ctx.moveTo(ic.x, drawY); ctx.lineTo(centerX, drawY + ic.h); ctx.lineTo(ic.x + ic.w, drawY); ctx.fill();
     });
 
-    // ⛄ 雪人主角
     drawSnowman(player.x + player.w/2, player.y);
     
-    // 🛡️ 繪製護盾特效
     if (shieldTime > 0) {
         ctx.strokeStyle = `rgba(255, 215, 0, ${0.3 + Math.sin(Date.now()/100)*0.2})`;
         ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.arc(player.x + player.w/2, player.y + 30, 45, 0, Math.PI*2);
-        ctx.stroke();
+        ctx.beginPath(); ctx.arc(player.x + player.w/2, player.y + 30, 48, 0, Math.PI*2); ctx.stroke();
     }
 }
 
@@ -337,10 +332,8 @@ function spawnPlatform(yPos) {
     const px = Math.random()*(canvas.width - pWidth);
     const py = yPos || canvas.height;
     platforms.push({ x: px, y: py, w: pWidth, h: 15 });
-    
-    // 🍎 隨機在平台上放蘋果 (20% 機率)
-    if (Math.random() < 0.2) {
-        apples.push({ x: px + pWidth/2 - 10, y: py - 25 });
+    if (Math.random() < 0.25) { // 稍微提高蘋果機率到 25%
+        apples.push({ x: px + pWidth/2 - 12, y: py - 35 });
     }
 }
 
