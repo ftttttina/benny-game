@@ -7,20 +7,32 @@
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Arial', sans-serif; touch-action: none; }
         canvas { display: block; background: #2c3e50; margin: 0 auto; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 18px; pointer-events: none; text-shadow: 2px 2px 4px #000; z-index: 10; display: none; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
-        #startBtn { padding: 15px 40px; font-size: 24px; cursor: pointer; background: #e74c3c; color: white; border: none; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: 0.3s; }
+        
+        /* UI 樣式 */
+        #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 24px; pointer-events: none; z-index: 10; display: none; }
+        .heart { color: #e74c3c; margin-right: 5px; text-shadow: 2px 2px 4px #000; }
+        #scoreDisplay { margin-left: 15px; font-size: 20px; vertical-align: middle; }
+        
+        /* 頁面切換 */
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
+        #startBtn { padding: 15px 45px; font-size: 26px; cursor: pointer; background: #e74c3c; color: white; border: none; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); transition: 0.2s; }
+        #startBtn:active { transform: scale(0.95); }
+        
         #deathScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; display: none; z-index: 30; }
         #levelUp { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #f1c40f; font-size: 40px; font-weight: bold; display: none; z-index: 15; pointer-events: none; }
     </style>
 </head>
 <body>
 
-    <div id="ui">Lives: <span id="lives">3</span> | Score: <span id="score">0</span></div>
+    <div id="ui">
+        <span id="heartContainer"></span>
+        <span id="scoreDisplay">Score: <span id="score">0</span></span>
+    </div>
+
     <div id="levelUp">SPEED UP!</div>
     
     <div id="overlay">
-        <h1 style="color: white; margin-bottom: 20px;">Benny's Game</h1>
+        <h1 style="color: white; margin-bottom: 30px; letter-spacing: 2px;">Benny's Game</h1>
         <button id="startBtn">START GAME</button>
     </div>
 
@@ -31,15 +43,15 @@
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const ui = document.getElementById('ui');
+const heartContainer = document.getElementById('heartContainer');
 const overlay = document.getElementById('overlay');
 const startBtn = document.getElementById('startBtn');
 const deathScreen = document.getElementById('deathScreen');
 const levelUpMsg = document.getElementById('levelUp');
 
-// --- 主角圖片設定 ---
+// --- 資源設定 ---
 const playerImg = new Image();
-// 請將下方的網址替換成你的 jpg 檔案路徑，例如 "face.jpg"
-playerImg.src = 'https://via.placeholder.com/50/f1c40f/ffffff?text=Benny'; 
+playerImg.src = 'your_face.jpg'; // 請確保圖片與此 HTML 在同一個 GitHub 資料夾
 
 let lives, score, gameActive, currentPlatformSpeed;
 const gravity = 0.5;
@@ -50,12 +62,13 @@ let keys = {};
 let touchStartX = 0;
 
 const player = {
-    x: 0, y: 0, w: 35, h: 35, // 稍微加大一點讓臉看更清楚
+    x: 0, y: 0, w: 38, h: 38,
     vx: 0, vy: 0, grounded: false
 };
 
 function resetGame() {
-    lives = 3; score = 0;
+    lives = 3; 
+    score = 0;
     currentPlatformSpeed = 1.8;
     gameActive = true;
     platforms = [];
@@ -63,15 +76,14 @@ function resetGame() {
     canvas.width = window.innerWidth > 500 ? 400 : window.innerWidth;
     canvas.height = window.innerHeight;
     
-    player.x = canvas.width / 2;
+    player.x = canvas.width / 2 - player.w / 2;
     player.y = canvas.height / 2;
     
-    // 生成初始平台，使用隨機高度間距
-    let currentY = 150;
-    while (currentY < canvas.height + 100) {
-        spawnPlatform(currentY);
-        // 高度隨機：在 100 到 160 像素之間隨機產生下一個平台的高度
-        currentY += 100 + Math.random() * 60; 
+    // 初始化隨機高度平台
+    let lastY = 200;
+    for(let i=0; i<6; i++) {
+        spawnPlatform(lastY);
+        lastY += 130 + Math.random() * 60;
     }
     
     updateUI();
@@ -81,24 +93,36 @@ function resetGame() {
     requestAnimationFrame(update);
 }
 
+function updateUI() {
+    document.getElementById('score').innerText = score;
+    // 更新愛心圖示 (♥ 是實心, ♡ 是空心)
+    let heartsHtml = '';
+    for(let i=1; i<=3; i++) {
+        heartsHtml += `<span class="heart">${i <= lives ? '♥' : '♡'}</span>`;
+    }
+    heartContainer.innerHTML = heartsHtml;
+}
+
 function spawnPlatform(yPos) {
     const minWidth = 70;
-    const maxWidth = Math.max(50, 180 - (Math.floor(score/5) * 10)); 
+    const maxWidth = Math.max(55, 180 - (Math.floor(score/5) * 8)); 
     const pWidth = Math.random() * (maxWidth - minWidth) + minWidth;
+    
+    let finalY = yPos;
+    if (!finalY && platforms.length > 0) {
+        const lastP = platforms[platforms.length - 1];
+        finalY = lastP.y + 130 + Math.random() * 70; // 隨機高度間距
+    }
+
     platforms.push({
         x: Math.random() * (canvas.width - pWidth),
-        y: yPos || canvas.height + (Math.random() * 50), // 新生成的平台也有隨機 y 偏移
+        y: finalY || canvas.height,
         w: pWidth,
         h: 12
     });
 }
 
-function updateUI() {
-    document.getElementById('lives').innerText = lives;
-    document.getElementById('score').innerText = score;
-}
-
-// 控制邏輯
+// 事件監聽
 startBtn.addEventListener('click', resetGame);
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
@@ -122,6 +146,7 @@ function update() {
     player.y += player.vy;
     player.x += player.vx;
 
+    // 邊界檢查
     if (player.x < 0) player.x = 0;
     if (player.x + player.w > canvas.width) player.x = canvas.width - player.w;
 
@@ -129,6 +154,7 @@ function update() {
     platforms.forEach((p, i) => {
         p.y -= currentPlatformSpeed;
 
+        // 碰撞檢測
         if (player.vy > 0 && 
             player.x < p.x + p.w && player.x + player.w > p.x &&
             player.y + player.h > p.y && player.y + player.h < p.y + p.h + player.vy) {
@@ -137,12 +163,10 @@ function update() {
             player.grounded = true;
         }
 
+        // 移除上方平台並從下方補充
         if (p.y < -20) {
             platforms.splice(i, 1);
-            // 每次上方消失一個，下方補一個，並加入高度隨機性
-            const lastP = platforms[platforms.length - 1];
-            const nextY = lastP ? lastP.y + 120 + Math.random() * 60 : canvas.height;
-            spawnPlatform(nextY);
+            spawnPlatform();
             score++;
             updateUI();
             if (score % 15 === 0 && score !== 0) {
@@ -152,15 +176,13 @@ function update() {
         }
     });
 
-    if (player.y <= 20 || player.y > canvas.height) handleLifeLoss();
+    // 死亡檢查
+    if (player.y <= 20 || player.y > canvas.height) {
+        handleLifeLoss();
+    }
 
     draw();
     if (gameActive) requestAnimationFrame(update);
-}
-
-function showSpeedUpEffect() {
-    levelUpMsg.style.display = 'block';
-    setTimeout(() => { levelUpMsg.style.display = 'none'; }, 1000);
 }
 
 function handleLifeLoss() {
@@ -175,15 +197,22 @@ function handleLifeLoss() {
             ui.style.display = 'none';
         }, 1000);
     } else {
+        // 扣命後重置位置
         player.y = canvas.height / 2;
         player.vy = 0;
+        // 瞬間讓主角閃爍一下（可選）
     }
+}
+
+function showSpeedUpEffect() {
+    levelUpMsg.style.display = 'block';
+    setTimeout(() => { levelUpMsg.style.display = 'none'; }, 1000);
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 頂部尖刺
+    // 繪製頂部尖刺
     ctx.fillStyle = "#e74c3c";
     for(let i=0; i<canvas.width; i+=20) {
         ctx.beginPath();
@@ -191,17 +220,16 @@ function draw() {
         ctx.fill();
     }
 
-    // 平台
+    // 繪製平台
     ctx.fillStyle = "#ecf0f1";
     platforms.forEach(p => {
         ctx.fillRect(p.x, p.y, p.w, p.h);
     });
 
-    // 繪製主角頭像
-    if (playerImg.complete) {
+    // 繪製主角 (使用圖片)
+    if (playerImg.complete && playerImg.naturalWidth !== 0) {
         ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
     } else {
-        // 如果圖片還沒載入，先用方塊代替
         ctx.fillStyle = "#f1c40f";
         ctx.fillRect(player.x, player.y, player.w, player.h);
     }
