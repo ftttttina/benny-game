@@ -3,15 +3,38 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Benny's Ice World</title>
+    <title>Benny's Ice World - Pro</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #051937; font-family: 'Segoe UI', sans-serif; touch-action: none; }
-        canvas { display: block; background: linear-gradient(to bottom, #051937, #004d7a, #008793, #00bf72); margin: 0 auto; }
+        :root {
+            /* 初始背景顏色變數 */
+            --bg-color-top: #051937;
+            --bg-color-mid: #004d7a;
+            --bg-color-bottom: #008793;
+        }
+        body { margin: 0; overflow: hidden; background: #051937; font-family: 'Segoe UI', sans-serif; touch-action: none; transition: background 2s ease; }
+        #gameCanvas { 
+            display: block; 
+            margin: 0 auto;
+            /* 背景平滑過渡核心 */
+            background: linear-gradient(to bottom, var(--bg-color-top), var(--bg-color-mid), var(--bg-color-bottom));
+            transition: all 2s ease; 
+        }
         #ui { position: absolute; top: 15px; left: 15px; display: none; z-index: 10; pointer-events: none; }
         #scoreDisplay { color: white; font-size: 20px; font-weight: bold; text-shadow: 1px 1px 3px #000; margin-bottom: 5px; }
         #heartsContainer { display: flex; gap: 5px; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
-        #startBtn { padding: 12px 30px; font-size: 16px; cursor: pointer; background: rgba(255, 255, 255, 0.15); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 12px; backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px); transition: 0.3s; }
+        
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
+        
+        /* 拍照區樣式 */
+        #cameraContainer { width: 150px; height: 150px; border-radius: 50%; overflow: hidden; border: 3px solid #fff; margin-bottom: 15px; background: #333; position: relative; }
+        #videoFeed { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+        #photoCanvas { display: none; }
+
+        .btn-group { display: flex; gap: 10px; }
+        button { padding: 10px 20px; font-size: 14px; cursor: pointer; background: rgba(255, 255, 255, 0.15); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; backdrop-filter: blur(10px); transition: 0.3s; }
+        button:hover { background: rgba(255, 255, 255, 0.3); }
+        #startBtn { background: #22d3ee; color: #051937; font-weight: bold; border: none; }
+        
         #deathScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; display: none; z-index: 30; }
     </style>
 </head>
@@ -23,10 +46,20 @@
     </div>
     
     <div id="overlay">
-        <h2 style="color: white; margin-bottom: 20px; font-weight: 300;">Benny's Game</h2>
-        <button id="startBtn">START GAME</button>
+        <h2 style="color: white; margin-bottom: 10px; font-weight: 300;">Benny's Ice World</h2>
+        
+        <div id="cameraContainer">
+            <video id="videoFeed" autoplay playsinline></video>
+        </div>
+        
+        <div class="btn-group">
+            <button id="snapBtn">📸 拍照 (Take Photo)</button>
+            <button id="startBtn">🎮 開始遊戲 (Start)</button>
+        </div>
+        <p style="color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 10px;">請先拍照以自定義主角角色</p>
     </div>
 
+    <canvas id="photoCanvas" width="100" height="100"></canvas>
     <div id="deathScreen"></div>
     <canvas id="gameCanvas"></canvas>
 
@@ -35,18 +68,21 @@ const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const ui = document.getElementById('ui');
 const overlay = document.getElementById('overlay');
+const video = document.getElementById('videoFeed');
+const photoCanvas = document.getElementById('photoCanvas');
+const snapBtn = document.getElementById('snapBtn');
 const startBtn = document.getElementById('startBtn');
-const deathScreen = document.getElementById('deathScreen');
 const heartsContainer = document.getElementById('heartsContainer');
 
-// 資源加載
-const playerImg = new Image();
-playerImg.src = 'your_face.jpg'; 
+// 背景顏色方案
+const bgSchemes = [
+    { top: '#051937', mid: '#004d7a', bottom: '#008793' }, // 藍色
+    { top: '#1a0537', mid: '#4d007a', bottom: '#870093' }, // 紫色
+    { top: '#05371a', mid: '#007a4d', bottom: '#009387' }, // 綠色
+    { top: '#372a05', mid: '#7a5b00', bottom: '#937f00' }  // 金色
+];
 
-// 音效 (請確保 GitHub 倉庫有這些檔案，或換成線上連結)
-const dropSound = new Audio('drop.mp3'); 
-const hitSound = new Audio('hit.mp3'); 
-
+let playerImg = null; // 存儲用戶拍照
 let lives, score, gameActive, currentPlatformSpeed;
 let platforms = [], ceilingIcicles = [], snowflakes = [];
 let lastDropTime = 0;
@@ -59,74 +95,78 @@ const mobileSensitivity = 0.15;
 let keys = {};
 let touchStartX = 0;
 
-const player = { x: 0, y: 0, w: 35, h: 35, vx: 0, vy: 0, grounded: false };
+const player = { x: 0, y: 0, w: 40, h: 40, vx: 0, vy: 0, grounded: false };
 
+// --- 相機功能 ---
+async function setupCamera() {
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        video.srcObject = stream;
+    } catch (err) {
+        console.error("相機啟動失敗:", err);
+    }
+}
+
+snapBtn.addEventListener('click', () => {
+    const pCtx = photoCanvas.getContext('2d');
+    // 鏡像翻轉並繪製到隱藏畫布
+    pCtx.save();
+    pCtx.translate(100, 0);
+    pCtx.scale(-1, 1);
+    pCtx.drawImage(video, 0, 0, 100, 100);
+    pCtx.restore();
+    
+    playerImg = new Image();
+    playerImg.src = photoCanvas.toDataURL('image/png');
+    snapBtn.innerText = "✅ 已完成拍照";
+});
+
+// --- 遊戲邏輯 ---
 function updateHeartsUI() {
     heartsContainer.innerHTML = '';
     for (let i = 0; i < maxLives; i++) {
         const heart = document.createElement('canvas');
-        heart.width = 25; heart.height = 25;
+        heart.width = 30; heart.height = 30;
         const hCtx = heart.getContext('2d');
-        drawHeart(hCtx, 12.5, 12.5, 10, i < lives);
+        drawHeart(hCtx, 15, 12, 10, i < lives);
         heartsContainer.appendChild(heart);
     }
 }
 
-// 簡約版愛心繪製邏輯
 function drawHeart(ctx, x, y, size, isFull) {
     ctx.save();
-    ctx.translate(x, y - size/4); // 稍微微調重心位置
-
+    ctx.translate(x, y - size/4);
     ctx.beginPath();
-    // 繪製簡約愛心輪廓
     const r = size / 2;
-    ctx.arc(-r / 2, 0, r / 2, Math.PI, 0); // 左圓頭
-    ctx.arc(r / 2, 0, r / 2, Math.PI, 0);  // 右圓頭
-    ctx.lineTo(0, r * 1.2);               // 尖角底
+    ctx.arc(-r / 2, 0, r / 2, Math.PI, 0);
+    ctx.arc(r / 2, 0, r / 2, Math.PI, 0);
+    ctx.lineTo(0, r * 1.2);
     ctx.closePath();
-    
-    if (isFull) {
-        ctx.fillStyle = "#FF4D4D"; // 實心紅
-        ctx.fill();
-    } else {
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; // 空心白邊
-        ctx.lineWidth = 2;
-        ctx.stroke();
-    }
+    if (isFull) { ctx.fillStyle = "#FF4D4D"; ctx.fill(); }
+    else { ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.lineWidth = 2; ctx.stroke(); }
     ctx.restore();
 }
 
-// 為了讓 UI 更整潔，微調 updateHeartsUI 的畫布大小
-function updateHeartsUI() {
-    heartsContainer.innerHTML = '';
-    for (let i = 0; i < maxLives; i++) {
-        const heart = document.createElement('canvas');
-        heart.width = 30;  // 稍微加寬
-        heart.height = 30; // 稍微加高
-        const hCtx = heart.getContext('2d');
-        // size 設定為 10 即可得到很精緻的小心心
-        drawHeart(hCtx, 15, 12, 10, i < lives); 
-        heartsContainer.appendChild(heart);
-    }
+function changeBackground(level) {
+    const scheme = bgSchemes[level % bgSchemes.length];
+    document.documentElement.style.setProperty('--bg-color-top', scheme.top);
+    document.documentElement.style.setProperty('--bg-color-mid', scheme.mid);
+    document.documentElement.style.setProperty('--bg-color-bottom', scheme.bottom);
 }
 
 function initCeiling() {
     ceilingIcicles = [];
     for(let i=0; i<canvas.width; i+=25) {
         ceilingIcicles.push({ 
-            x: i, 
-            w: 15+Math.random()*15, 
-            h: 20+Math.random()*40, 
-            isDropping: false, 
-            speed: 0,
-            opacity: 0.4 + Math.random() * 0.5 // 隨機透明度
+            x: i, w: 15+Math.random()*15, h: 25+Math.random()*45, 
+            isDropping: false, speed: 0, opacity: 0.5 + Math.random() * 0.4 
         });
     }
 }
 
 function initSnow() {
     snowflakes = [];
-    for(let i=0; i<60; i++) snowflakes.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, r: Math.random()*2+1, d: Math.random()*1 });
+    for(let i=0; i<60; i++) snowflakes.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, r: Math.random()*1.5 + 0.5, d: Math.random()*1 });
 }
 
 function resetGame() {
@@ -135,12 +175,14 @@ function resetGame() {
     lives = 5; score = 0; currentPlatformSpeed = 1.7;
     gameActive = true; platforms = []; 
     initCeiling(); initSnow();
-    player.x = canvas.width/2 - 17; player.y = canvas.height/2;
+    changeBackground(0);
+    
+    player.x = canvas.width/2 - 20; player.y = canvas.height/2;
     player.vy = 0; player.vx = 0;
     for(let i=0; i<6; i++) spawnPlatform(canvas.height/6*i + 250);
     updateHeartsUI();
     document.getElementById('score').innerText = score;
-    ui.style.display = 'block'; overlay.style.display = 'none'; deathScreen.style.display = 'none';
+    ui.style.display = 'block'; overlay.style.display = 'none';
     requestAnimationFrame(update);
 }
 
@@ -149,30 +191,22 @@ function spawnPlatform(yPos) {
     platforms.push({ x: Math.random()*(canvas.width - pWidth), y: yPos || canvas.height, w: pWidth, h: 15 });
 }
 
-startBtn.addEventListener('click', () => {
-    // 解鎖音效 (瀏覽器政策)
-    dropSound.load();
-    hitSound.load();
-    resetGame();
-});
-
+startBtn.addEventListener('click', resetGame);
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
-window.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
-window.addEventListener('touchmove', e => {
-    const diff = (e.touches[0].clientX - touchStartX) * mobileSensitivity;
-    player.vx = diff;
-    e.preventDefault();
-}, { passive: false });
-window.addEventListener('touchend', () => player.vx = 0);
 
 function update() {
     if (!gameActive) return;
     currentPlatformSpeed += 0.0004;
 
+    // 背景隨分數變化
+    if (score > 0 && score % 15 === 0) {
+        changeBackground(Math.floor(score / 15));
+    }
+
     if (keys['ArrowLeft']) player.vx = -baseWalkSpeed;
     else if (keys['ArrowRight']) player.vx = baseWalkSpeed;
-    else if (!('ontouchstart' in window)) player.vx *= 0.8;
+    else player.vx *= 0.85;
 
     player.vy += gravity;
     player.y += player.vy;
@@ -193,11 +227,7 @@ function update() {
     let now = Date.now();
     if (now - lastDropTime > dropInterval) {
         let idx = Math.floor(Math.random() * ceilingIcicles.length);
-        if(!ceilingIcicles[idx].isDropping) { 
-            ceilingIcicles[idx].isDropping = true; 
-            ceilingIcicles[idx].speed = 5 + Math.random()*5; 
-            dropSound.play().catch(() => {}); // 播放掉落音效
-        }
+        if(!ceilingIcicles[idx].isDropping) { ceilingIcicles[idx].isDropping = true; ceilingIcicles[idx].speed = 5 + Math.random()*5; }
         lastDropTime = now;
     }
 
@@ -205,8 +235,7 @@ function update() {
         if(ic.isDropping) {
             ic.y = (ic.y || 0) + ic.speed;
             if (ic.x < player.x + player.w && ic.x + ic.w > player.x && (ic.y || 0) < player.y + player.h && (ic.y || 0) + ic.h > player.y) {
-                handleLifeLoss();
-                ic.isDropping = false; ic.y = 0;
+                handleLifeLoss(); ic.isDropping = false; ic.y = 0;
             }
             if ((ic.y || 0) > canvas.height) { ic.isDropping = false; ic.y = 0; }
         }
@@ -215,7 +244,7 @@ function update() {
     if (player.y <= 40 || player.y > canvas.height) handleLifeLoss();
 
     snowflakes.forEach(s => {
-        s.y += 1 + s.r; s.x += Math.sin(s.d);
+        s.y += 0.8 + s.r; s.x += Math.sin(s.d) * 0.5;
         if (s.y > canvas.height) s.y = -10;
     });
 
@@ -226,21 +255,18 @@ function update() {
 function handleLifeLoss() {
     lives--;
     updateHeartsUI();
-    hitSound.play().catch(() => {}); // 播放撞擊音效
-    if (lives <= 0) { gameActive = false; showDeathEffect(); }
-    else { player.y = canvas.height / 2; player.vy = 0; player.vx = 0; }
-}
-
-function showDeathEffect() {
-    deathScreen.style.display = 'block';
-    setTimeout(() => { deathScreen.style.display = 'none'; overlay.style.display = 'flex'; ui.style.display = 'none'; }, 1000);
+    if (lives <= 0) { gameActive = false; deathScreen.style.display = 'block'; setTimeout(() => location.reload(), 1500); }
+    else { player.y = canvas.height / 2; player.vy = 0; }
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    
+    // 雪花 (顏色變淡)
+    ctx.fillStyle = "rgba(255,255,255,0.3)";
     snowflakes.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill(); });
 
+    // 冰塊平台
     platforms.forEach(p => {
         let grad = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
         grad.addColorStop(0, '#a5f3fc'); grad.addColorStop(1, '#22d3ee');
@@ -248,27 +274,53 @@ function draw() {
         ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.strokeRect(p.x, p.y, p.w, p.h);
     });
 
+    // 立體冰錐繪製
     ceilingIcicles.forEach(ic => {
         let drawY = ic.isDropping ? ic.y : 0;
-        // 使用 rgba 設定透明度
-        ctx.fillStyle = `rgba(224, 242, 254, ${ic.opacity})`;
+        let centerX = ic.x + ic.w / 2;
+        
+        // 主色
+        ctx.fillStyle = `rgba(180, 230, 255, ${ic.opacity})`;
         ctx.beginPath();
         ctx.moveTo(ic.x, drawY);
-        ctx.lineTo(ic.x + ic.w / 2, drawY + ic.h);
+        ctx.lineTo(centerX, drawY + ic.h);
         ctx.lineTo(ic.x + ic.w, drawY);
         ctx.fill();
-        // 增加一個白色的邊框讓透明冰錐更明顯
-        ctx.strokeStyle = `rgba(255, 255, 255, ${ic.opacity * 0.5})`;
-        ctx.lineWidth = 1;
+
+        // 側面陰影 (增加立體感)
+        ctx.fillStyle = `rgba(100, 180, 255, ${ic.opacity * 0.5})`;
+        ctx.beginPath();
+        ctx.moveTo(centerX, drawY);
+        ctx.lineTo(centerX, drawY + ic.h);
+        ctx.lineTo(ic.x + ic.w, drawY);
+        ctx.fill();
+
+        // 高光 (增加立體感)
+        ctx.strokeStyle = `rgba(255, 255, 255, ${ic.opacity})`;
+        ctx.beginPath();
+        ctx.moveTo(ic.x + 2, drawY);
+        ctx.lineTo(centerX, drawY + ic.h - 5);
         ctx.stroke();
     });
 
-    try {
+    // 主角頭像 (圓形裁切)
+    if (playerImg) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(player.x + player.w/2, player.y + player.h/2, player.w/2, 0, Math.PI*2);
+        ctx.clip();
         ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
-    } catch(e) {
+        ctx.restore();
+        // 加上一個白圈邊框
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    } else {
         ctx.fillStyle = "#f1c40f"; ctx.fillRect(player.x, player.y, player.w, player.h);
     }
 }
+
+setupCamera();
 </script>
 </body>
 </html>
