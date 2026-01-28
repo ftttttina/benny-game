@@ -6,16 +6,14 @@
     <title>Benny's Ice World - Pro</title>
     <style>
         :root {
-            /* 初始背景顏色變數 */
             --bg-color-top: #051937;
             --bg-color-mid: #004d7a;
             --bg-color-bottom: #008793;
         }
-        body { margin: 0; overflow: hidden; background: #051937; font-family: 'Segoe UI', sans-serif; touch-action: none; transition: background 2s ease; }
+        body { margin: 0; overflow: hidden; background: #051937; font-family: 'Segoe UI', sans-serif; touch-action: none; }
         #gameCanvas { 
             display: block; 
             margin: 0 auto;
-            /* 背景平滑過渡核心 */
             background: linear-gradient(to bottom, var(--bg-color-top), var(--bg-color-mid), var(--bg-color-bottom));
             transition: all 2s ease; 
         }
@@ -23,18 +21,20 @@
         #scoreDisplay { color: white; font-size: 20px; font-weight: bold; text-shadow: 1px 1px 3px #000; margin-bottom: 5px; }
         #heartsContainer { display: flex; gap: 5px; }
         
+        /* 倒數計時樣式 */
+        #countdown { 
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            color: white; font-size: 80px; font-weight: bold; z-index: 25; display: none;
+            text-shadow: 0 0 20px rgba(34, 211, 238, 0.8);
+        }
+
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
-        
-        /* 拍照區樣式 */
         #cameraContainer { width: 150px; height: 150px; border-radius: 50%; overflow: hidden; border: 3px solid #fff; margin-bottom: 15px; background: #333; position: relative; }
         #videoFeed { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
-        #photoCanvas { display: none; }
-
-        .btn-group { display: flex; gap: 10px; }
-        button { padding: 10px 20px; font-size: 14px; cursor: pointer; background: rgba(255, 255, 255, 0.15); color: white; border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 8px; backdrop-filter: blur(10px); transition: 0.3s; }
-        button:hover { background: rgba(255, 255, 255, 0.3); }
-        #startBtn { background: #22d3ee; color: #051937; font-weight: bold; border: none; }
         
+        .btn-group { display: flex; gap: 10px; }
+        button { padding: 12px 24px; font-size: 14px; cursor: pointer; background: rgba(255, 255, 255, 0.1); color: white; border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 12px; backdrop-filter: blur(10px); transition: 0.3s; }
+        #startBtn { background: #22d3ee; color: #051937; font-weight: bold; border: none; }
         #deathScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; display: none; z-index: 30; }
     </style>
 </head>
@@ -44,22 +44,21 @@
         <div id="scoreDisplay">Score: <span id="score">0</span></div>
         <div id="heartsContainer"></div>
     </div>
+
+    <div id="countdown">3</div>
     
     <div id="overlay">
         <h2 style="color: white; margin-bottom: 10px; font-weight: 300;">Benny's Ice World</h2>
-        
         <div id="cameraContainer">
             <video id="videoFeed" autoplay playsinline></video>
         </div>
-        
         <div class="btn-group">
-            <button id="snapBtn">📸 拍照 (Take Photo)</button>
-            <button id="startBtn">🎮 開始遊戲 (Start)</button>
+            <button id="snapBtn">📸 拍照</button>
+            <button id="startBtn">🎮 開始遊戲</button>
         </div>
-        <p style="color: rgba(255,255,255,0.6); font-size: 12px; margin-top: 10px;">請先拍照以自定義主角角色</p>
     </div>
 
-    <canvas id="photoCanvas" width="100" height="100"></canvas>
+    <canvas id="photoCanvas" width="100" height="100" style="display:none;"></canvas>
     <div id="deathScreen"></div>
     <canvas id="gameCanvas"></canvas>
 
@@ -72,17 +71,16 @@ const video = document.getElementById('videoFeed');
 const photoCanvas = document.getElementById('photoCanvas');
 const snapBtn = document.getElementById('snapBtn');
 const startBtn = document.getElementById('startBtn');
+const countdownEl = document.getElementById('countdown');
 const heartsContainer = document.getElementById('heartsContainer');
 
-// 背景顏色方案
 const bgSchemes = [
-    { top: '#051937', mid: '#004d7a', bottom: '#008793' }, // 藍色
-    { top: '#1a0537', mid: '#4d007a', bottom: '#870093' }, // 紫色
-    { top: '#05371a', mid: '#007a4d', bottom: '#009387' }, // 綠色
-    { top: '#372a05', mid: '#7a5b00', bottom: '#937f00' }  // 金色
+    { top: '#051937', mid: '#004d7a', bottom: '#008793' },
+    { top: '#1a0537', mid: '#4d007a', bottom: '#870093' },
+    { top: '#05371a', mid: '#007a4d', bottom: '#009387' }
 ];
 
-let playerImg = null; // 存儲用戶拍照
+let playerImg = null;
 let lives, score, gameActive, currentPlatformSpeed;
 let platforms = [], ceilingIcicles = [], snowflakes = [];
 let lastDropTime = 0;
@@ -91,82 +89,56 @@ const maxLives = 5;
 
 const gravity = 0.5;
 const baseWalkSpeed = 5;
-const mobileSensitivity = 0.15;
+const mobileSensitivity = 0.3; // 🚀 調高靈敏度，更跟手
 let keys = {};
 let touchStartX = 0;
 
 const player = { x: 0, y: 0, w: 40, h: 40, vx: 0, vy: 0, grounded: false };
 
-// --- 相機功能 ---
 async function setupCamera() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
         video.srcObject = stream;
-    } catch (err) {
-        console.error("相機啟動失敗:", err);
-    }
+    } catch (err) { console.error("相機失敗", err); }
 }
 
 snapBtn.addEventListener('click', () => {
     const pCtx = photoCanvas.getContext('2d');
-    // 鏡像翻轉並繪製到隱藏畫布
     pCtx.save();
-    pCtx.translate(100, 0);
-    pCtx.scale(-1, 1);
+    pCtx.translate(100, 0); pCtx.scale(-1, 1);
     pCtx.drawImage(video, 0, 0, 100, 100);
     pCtx.restore();
-    
     playerImg = new Image();
     playerImg.src = photoCanvas.toDataURL('image/png');
-    snapBtn.innerText = "✅ 已完成拍照";
+    snapBtn.innerText = "✅ 拍照成功";
 });
 
-// --- 遊戲邏輯 ---
-function updateHeartsUI() {
-    heartsContainer.innerHTML = '';
-    for (let i = 0; i < maxLives; i++) {
-        const heart = document.createElement('canvas');
-        heart.width = 30; heart.height = 30;
-        const hCtx = heart.getContext('2d');
-        drawHeart(hCtx, 15, 12, 10, i < lives);
-        heartsContainer.appendChild(heart);
-    }
-}
+// 開始倒數邏輯
+startBtn.addEventListener('click', () => {
+    overlay.style.display = 'none';
+    startCountdown();
+});
 
-function drawHeart(ctx, x, y, size, isFull) {
-    ctx.save();
-    ctx.translate(x, y - size/4);
-    ctx.beginPath();
-    const r = size / 2;
-    ctx.arc(-r / 2, 0, r / 2, Math.PI, 0);
-    ctx.arc(r / 2, 0, r / 2, Math.PI, 0);
-    ctx.lineTo(0, r * 1.2);
-    ctx.closePath();
-    if (isFull) { ctx.fillStyle = "#FF4D4D"; ctx.fill(); }
-    else { ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; ctx.lineWidth = 2; ctx.stroke(); }
-    ctx.restore();
-}
-
-function changeBackground(level) {
-    const scheme = bgSchemes[level % bgSchemes.length];
-    document.documentElement.style.setProperty('--bg-color-top', scheme.top);
-    document.documentElement.style.setProperty('--bg-color-mid', scheme.mid);
-    document.documentElement.style.setProperty('--bg-color-bottom', scheme.bottom);
-}
-
-function initCeiling() {
-    ceilingIcicles = [];
-    for(let i=0; i<canvas.width; i+=25) {
-        ceilingIcicles.push({ 
-            x: i, w: 15+Math.random()*15, h: 25+Math.random()*45, 
-            isDropping: false, speed: 0, opacity: 0.5 + Math.random() * 0.4 
-        });
-    }
-}
-
-function initSnow() {
-    snowflakes = [];
-    for(let i=0; i<60; i++) snowflakes.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, r: Math.random()*1.5 + 0.5, d: Math.random()*1 });
+function startCountdown() {
+    countdownEl.style.display = 'block';
+    let count = 3;
+    countdownEl.innerText = count;
+    
+    const timer = setInterval(() => {
+        count--;
+        if (count > 0) {
+            countdownEl.innerText = count;
+            // 簡單的縮放動畫效果
+            countdownEl.style.transform = 'translate(-50%, -50%) scale(1.2)';
+            setTimeout(() => countdownEl.style.transform = 'translate(-50%, -50%) scale(1)', 200);
+        } else if (count === 0) {
+            countdownEl.innerText = "GO!";
+        } else {
+            clearInterval(timer);
+            countdownEl.style.display = 'none';
+            resetGame(); // 倒數結束正式開始
+        }
+    }, 1000);
 }
 
 function resetGame() {
@@ -175,38 +147,34 @@ function resetGame() {
     lives = 5; score = 0; currentPlatformSpeed = 1.7;
     gameActive = true; platforms = []; 
     initCeiling(); initSnow();
-    changeBackground(0);
-    
     player.x = canvas.width/2 - 20; player.y = canvas.height/2;
     player.vy = 0; player.vx = 0;
     for(let i=0; i<6; i++) spawnPlatform(canvas.height/6*i + 250);
     updateHeartsUI();
-    document.getElementById('score').innerText = score;
-    ui.style.display = 'block'; overlay.style.display = 'none';
+    ui.style.display = 'block';
     requestAnimationFrame(update);
 }
 
-function spawnPlatform(yPos) {
-    const pWidth = 80 + Math.random() * 80;
-    platforms.push({ x: Math.random()*(canvas.width - pWidth), y: yPos || canvas.height, w: pWidth, h: 15 });
-}
-
-startBtn.addEventListener('click', resetGame);
-window.addEventListener('keydown', e => keys[e.code] = true);
-window.addEventListener('keyup', e => keys[e.code] = false);
+// 觸控優化
+window.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
+window.addEventListener('touchmove', e => {
+    const touchX = e.touches[0].clientX;
+    const diff = (touchX - touchStartX) * mobileSensitivity;
+    player.vx = diff; // 直接賦值速度，手感更直接
+    e.preventDefault();
+}, { passive: false });
+window.addEventListener('touchend', () => player.vx = 0);
 
 function update() {
     if (!gameActive) return;
     currentPlatformSpeed += 0.0004;
 
-    // 背景隨分數變化
     if (score > 0 && score % 15 === 0) {
-        changeBackground(Math.floor(score / 15));
+        const scheme = bgSchemes[Math.floor(score / 15) % bgSchemes.length];
+        document.documentElement.style.setProperty('--bg-color-top', scheme.top);
+        document.documentElement.style.setProperty('--bg-color-mid', scheme.mid);
+        document.documentElement.style.setProperty('--bg-color-bottom', scheme.bottom);
     }
-
-    if (keys['ArrowLeft']) player.vx = -baseWalkSpeed;
-    else if (keys['ArrowRight']) player.vx = baseWalkSpeed;
-    else player.vx *= 0.85;
 
     player.vy += gravity;
     player.y += player.vy;
@@ -255,15 +223,15 @@ function update() {
 function handleLifeLoss() {
     lives--;
     updateHeartsUI();
-    if (lives <= 0) { gameActive = false; deathScreen.style.display = 'block'; setTimeout(() => location.reload(), 1500); }
-    else { player.y = canvas.height / 2; player.vy = 0; }
+    if (lives <= 0) { gameActive = false; location.reload(); }
+    else { player.y = canvas.height / 2; player.vy = 0; player.vx = 0; }
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 雪花 (顏色變淡)
-    ctx.fillStyle = "rgba(255,255,255,0.3)";
+    // 淡色雪花
+    ctx.fillStyle = "rgba(255,255,255,0.25)";
     snowflakes.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill(); });
 
     // 冰塊平台
@@ -271,39 +239,22 @@ function draw() {
         let grad = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
         grad.addColorStop(0, '#a5f3fc'); grad.addColorStop(1, '#22d3ee');
         ctx.fillStyle = grad; ctx.fillRect(p.x, p.y, p.w, p.h);
-        ctx.strokeStyle = "rgba(255,255,255,0.5)"; ctx.strokeRect(p.x, p.y, p.w, p.h);
     });
 
-    // 立體冰錐繪製
+    // 立體冰錐
     ceilingIcicles.forEach(ic => {
         let drawY = ic.isDropping ? ic.y : 0;
         let centerX = ic.x + ic.w / 2;
-        
-        // 主色
         ctx.fillStyle = `rgba(180, 230, 255, ${ic.opacity})`;
         ctx.beginPath();
-        ctx.moveTo(ic.x, drawY);
-        ctx.lineTo(centerX, drawY + ic.h);
-        ctx.lineTo(ic.x + ic.w, drawY);
-        ctx.fill();
-
-        // 側面陰影 (增加立體感)
-        ctx.fillStyle = `rgba(100, 180, 255, ${ic.opacity * 0.5})`;
+        ctx.moveTo(ic.x, drawY); ctx.lineTo(centerX, drawY + ic.h); ctx.lineTo(ic.x + ic.w, drawY); ctx.fill();
+        // 側面陰影
+        ctx.fillStyle = `rgba(100, 180, 255, ${ic.opacity * 0.4})`;
         ctx.beginPath();
-        ctx.moveTo(centerX, drawY);
-        ctx.lineTo(centerX, drawY + ic.h);
-        ctx.lineTo(ic.x + ic.w, drawY);
-        ctx.fill();
-
-        // 高光 (增加立體感)
-        ctx.strokeStyle = `rgba(255, 255, 255, ${ic.opacity})`;
-        ctx.beginPath();
-        ctx.moveTo(ic.x + 2, drawY);
-        ctx.lineTo(centerX, drawY + ic.h - 5);
-        ctx.stroke();
+        ctx.moveTo(centerX, drawY); ctx.lineTo(centerX, drawY + ic.h); ctx.lineTo(ic.x + ic.w, drawY); ctx.fill();
     });
 
-    // 主角頭像 (圓形裁切)
+    // 主角頭像
     if (playerImg) {
         ctx.save();
         ctx.beginPath();
@@ -311,13 +262,47 @@ function draw() {
         ctx.clip();
         ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
         ctx.restore();
-        // 加上一個白圈邊框
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-        ctx.stroke();
+        ctx.strokeStyle = "white"; ctx.lineWidth = 2; ctx.stroke();
     } else {
         ctx.fillStyle = "#f1c40f"; ctx.fillRect(player.x, player.y, player.w, player.h);
     }
+}
+
+function updateHeartsUI() {
+    heartsContainer.innerHTML = '';
+    for (let i = 0; i < maxLives; i++) {
+        const heart = document.createElement('canvas');
+        heart.width = 30; heart.height = 30;
+        const hCtx = heart.getContext('2d');
+        drawHeart(hCtx, 15, 15, 10, i < lives);
+        heartsContainer.appendChild(heart);
+    }
+}
+
+function drawHeart(ctx, x, y, size, isFull) {
+    ctx.save(); ctx.translate(x, y - size/4); ctx.beginPath();
+    const r = size / 2;
+    ctx.arc(-r / 2, 0, r / 2, Math.PI, 0); ctx.arc(r / 2, 0, r / 2, Math.PI, 0); ctx.lineTo(0, r * 1.2); ctx.closePath();
+    if (isFull) { ctx.fillStyle = "#FF4D4D"; ctx.fill(); }
+    else { ctx.strokeStyle = "rgba(255, 255, 255, 0.6)"; ctx.lineWidth = 2; ctx.stroke(); }
+    ctx.restore();
+}
+
+function spawnPlatform(yPos) {
+    const pWidth = 80 + Math.random() * 80;
+    platforms.push({ x: Math.random()*(canvas.width - pWidth), y: yPos || canvas.height, w: pWidth, h: 15 });
+}
+
+function initCeiling() {
+    ceilingIcicles = [];
+    for(let i=0; i<canvas.width; i+=25) {
+        ceilingIcicles.push({ x: i, w: 15+Math.random()*15, h: 25+Math.random()*45, isDropping: false, speed: 0, opacity: 0.5+Math.random()*0.4 });
+    }
+}
+
+function initSnow() {
+    snowflakes = [];
+    for(let i=0; i<60; i++) snowflakes.push({ x: Math.random()*canvas.width, y: Math.random()*canvas.height, r: Math.random()*1.5+0.5, d: Math.random()*1 });
 }
 
 setupCamera();
