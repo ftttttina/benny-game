@@ -3,28 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Benny's Game</title>
+    <title>Benny's Ice World</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #1a1a1a; font-family: 'Segoe UI', sans-serif; touch-action: none; }
-        canvas { display: block; background: linear-gradient(to bottom, #2c3e50, #000000); margin: 0 auto; }
+        body { margin: 0; overflow: hidden; background: #051937; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        canvas { display: block; background: linear-gradient(to bottom, #051937, #004d7a, #008793, #00bf72, #a8eb12); margin: 0 auto; }
         #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 16px; pointer-events: none; text-shadow: 1px 1px 3px #000; z-index: 10; display: none; }
         
-        /* 毛玻璃按鈕樣式 */
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
         #startBtn { 
-            padding: 12px 30px; 
-            font-size: 18px; 
-            cursor: pointer; 
-            background: rgba(255, 255, 255, 0.1); 
-            color: white; 
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 15px;
-            backdrop-filter: blur(10px); /* 毛玻璃核心 */
-            -webkit-backdrop-filter: blur(10px);
-            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            padding: 12px 30px; font-size: 16px; cursor: pointer; 
+            background: rgba(255, 255, 255, 0.15); color: white; 
+            border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 12px;
+            backdrop-filter: blur(15px); -webkit-backdrop-filter: blur(15px);
             transition: 0.3s;
         }
-        #startBtn:hover { background: rgba(255, 255, 255, 0.2); transform: scale(1.05); }
+        #startBtn:hover { background: rgba(255, 255, 255, 0.25); }
         #deathScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; display: none; z-index: 30; }
     </style>
 </head>
@@ -33,7 +26,7 @@
     <div id="ui">Lives: <span id="lives">3</span> | Score: <span id="score">0</span></div>
     
     <div id="overlay">
-        <h2 style="color: white; margin-bottom: 20px; font-weight: 300; letter-spacing: 1px;">Benny's Game</h2>
+        <h2 style="color: white; margin-bottom: 20px; font-weight: 300;">Benny's Game</h2>
         <button id="startBtn">START GAME</button>
     </div>
 
@@ -48,74 +41,67 @@ const overlay = document.getElementById('overlay');
 const startBtn = document.getElementById('startBtn');
 const deathScreen = document.getElementById('deathScreen');
 
-// 載入主角圖片
 const playerImg = new Image();
 playerImg.src = 'your_face.jpg'; 
 
-// 遊戲參數
 let lives, score, gameActive, currentPlatformSpeed;
-let platforms = [], icicles = [], snowflakes = [];
-let lastIcicleTime = 0;
-const icicleInterval = 2500; 
+let platforms = [], icicles = [], ceilingIcicles = [], snowflakes = [];
+let lastDropTime = 0;
+const dropInterval = 2000; // 每2秒判定一次墜落
 
 const gravity = 0.5;
 const baseWalkSpeed = 5;
-const fallMultiplier = 0.8;
+const mobileSensitivity = 0.15; // 降低手機端靈敏度
 let keys = {};
 let touchStartX = 0;
 
 const player = { x: 0, y: 0, w: 35, h: 35, vx: 0, vy: 0, grounded: false };
 
-// 初始化雪花
-function initSnow() {
-    snowflakes = [];
-    for(let i=0; i<50; i++) {
-        snowflakes.push({
-            x: Math.random() * window.innerWidth,
-            y: Math.random() * window.innerHeight,
-            r: Math.random() * 3 + 1,
-            d: Math.random() * 1
+function initCeiling() {
+    ceilingIcicles = [];
+    for(let i=0; i<canvas.width; i+=25) {
+        ceilingIcicles.push({
+            x: i,
+            w: 15 + Math.random() * 15,
+            h: 20 + Math.random() * 40,
+            isDropping: false,
+            speed: 0
         });
     }
 }
 
+function initSnow() {
+    snowflakes = [];
+    for(let i=0; i<60; i++) {
+        snowflakes.push({ x: Math.random() * canvas.width, y: Math.random() * canvas.height, r: Math.random() * 2 + 1, d: Math.random() * 1 });
+    }
+}
+
 function resetGame() {
-    lives = 3; score = 0; currentPlatformSpeed = 1.6;
-    gameActive = true; platforms = []; icicles = [];
-    lastIcicleTime = Date.now();
-    
     canvas.width = window.innerWidth > 500 ? 400 : window.innerWidth;
     canvas.height = window.innerHeight;
+    lives = 3; score = 0; currentPlatformSpeed = 1.7;
+    gameActive = true; platforms = []; 
+    initCeiling();
+    initSnow();
     
     player.x = canvas.width / 2 - 17;
     player.y = canvas.height / 2;
     player.vy = 0; player.vx = 0;
     
-    for(let i=0; i<6; i++) spawnPlatform(canvas.height / 6 * i + 200);
+    for(let i=0; i<6; i++) spawnPlatform(canvas.height / 6 * i + 250);
     
     document.getElementById('lives').innerText = lives;
     document.getElementById('score').innerText = score;
     ui.style.display = 'block';
     overlay.style.display = 'none';
     deathScreen.style.display = 'none';
-    
-    initSnow();
     requestAnimationFrame(update);
 }
 
 function spawnPlatform(yPos) {
-    const pWidth = Math.random() * 110 + 70;
-    platforms.push({ x: Math.random() * (canvas.width - pWidth), y: yPos || canvas.height, w: pWidth, h: 12 });
-}
-
-function spawnIcicle() {
-    icicles.push({
-        x: Math.random() * (canvas.width - 20),
-        y: 20,
-        w: Math.random() * 10 + 10, // 隨機寬度
-        len: Math.random() * 30 + 20, // 隨機長度
-        speed: 3 + Math.random() * 3
-    });
+    const pWidth = 80 + Math.random() * 80;
+    platforms.push({ x: Math.random() * (canvas.width - pWidth), y: yPos || canvas.height, w: pWidth, h: 15 });
 }
 
 // 控制邏輯
@@ -124,8 +110,9 @@ window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
 window.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
 window.addEventListener('touchmove', e => {
-    const diff = e.touches[0].clientX - touchStartX;
-    player.vx = diff > 0 ? baseWalkSpeed : -baseWalkSpeed;
+    const touchX = e.touches[0].clientX;
+    const diff = (touchX - touchStartX) * mobileSensitivity; // 降低靈敏度
+    player.vx = diff;
     e.preventDefault();
 }, { passive: false });
 window.addEventListener('touchend', () => player.vx = 0);
@@ -134,11 +121,10 @@ function update() {
     if (!gameActive) return;
     currentPlatformSpeed += 0.0004;
 
-    // 移動
-    let moveSpeed = player.grounded ? baseWalkSpeed : baseWalkSpeed * fallMultiplier;
-    if (keys['ArrowLeft']) player.vx = -moveSpeed;
-    else if (keys['ArrowRight']) player.vx = moveSpeed;
-    else if (!('ontouchstart' in window)) player.vx *= 0.7;
+    // 水平移動
+    if (keys['ArrowLeft']) player.vx = -baseWalkSpeed;
+    else if (keys['ArrowRight']) player.vx = baseWalkSpeed;
+    else if (!('ontouchstart' in window)) player.vx *= 0.8;
 
     player.vy += gravity;
     player.y += player.vy;
@@ -146,7 +132,7 @@ function update() {
     if (player.x < 0) player.x = 0;
     if (player.x + player.w > canvas.width) player.x = canvas.width - player.w;
 
-    // 平台碰撞
+    // 平台邏輯 (冰塊外觀)
     player.grounded = false;
     platforms.forEach((p, i) => {
         p.y -= currentPlatformSpeed;
@@ -157,34 +143,51 @@ function update() {
         if (p.y < -20) { platforms.splice(i, 1); spawnPlatform(); score++; document.getElementById('score').innerText = score; }
     });
 
-    // 雪花飄落
-    snowflakes.forEach(s => {
-        s.y += Math.cos(s.d) + 1 + s.r/2;
-        s.x += Math.sin(s.d) * 1;
-        if (s.y > canvas.height) s.y = -10, s.x = Math.random() * canvas.width;
-    });
-
-    // 冰錐邏輯
-    if (Date.now() - lastIcicleTime > icicleInterval) { spawnIcicle(); lastIcicleTime = Date.now(); }
-    icicles.forEach((ic, index) => {
-        ic.y += ic.speed;
-        if (ic.x < player.x + player.w && ic.x + ic.w > player.x && ic.y < player.y + player.h && ic.y + ic.len > player.y) {
-            icicles.splice(index, 1); handleLifeLoss();
+    // 冰錐墜落判定
+    let now = Date.now();
+    if (now - lastDropTime > dropInterval) {
+        let idx = Math.floor(Math.random() * ceilingIcicles.length);
+        if(!ceilingIcicles[idx].isDropping) {
+            ceilingIcicles[idx].isDropping = true;
+            ceilingIcicles[idx].speed = 4 + Math.random() * 4;
         }
-        if (ic.y > canvas.height) icicles.splice(index, 1);
+        lastDropTime = now;
+    }
+
+    ceilingIcicles.forEach((ic, i) => {
+        if(ic.isDropping) {
+            ic.y = (ic.y || 0) + ic.speed;
+            // 碰撞主角
+            if (ic.x < player.x + player.w && ic.x + ic.w > player.x && (ic.y || 0) < player.y + player.h && (ic.y || 0) + ic.h > player.y) {
+                handleLifeLoss();
+                resetIcicle(ic);
+            }
+            if ((ic.y || 0) > canvas.height) resetIcicle(ic);
+        }
     });
 
-    if (player.y <= 20 || player.y > canvas.height) handleLifeLoss();
+    if (player.y <= 40 || player.y > canvas.height) handleLifeLoss();
+
+    snowflakes.forEach(s => {
+        s.y += 1 + s.r; s.x += Math.sin(s.d);
+        if (s.y > canvas.height) s.y = -10;
+    });
 
     draw();
     if (gameActive) requestAnimationFrame(update);
+}
+
+function resetIcicle(ic) {
+    ic.isDropping = false;
+    ic.y = 0;
+    ic.speed = 0;
 }
 
 function handleLifeLoss() {
     lives--;
     document.getElementById('lives').innerText = lives;
     if (lives <= 0) { gameActive = false; showDeathEffect(); }
-    else { player.y = canvas.height / 2; player.vy = 0; }
+    else { player.y = canvas.height / 2; player.vy = 0; player.vx = 0; }
 }
 
 function showDeathEffect() {
@@ -195,36 +198,37 @@ function showDeathEffect() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 繪製雪花
-    ctx.fillStyle = "white";
-    snowflakes.forEach(s => {
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-        ctx.fill();
+    // 雪花
+    ctx.fillStyle = "rgba(255,255,255,0.8)";
+    snowflakes.forEach(s => { ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill(); });
+
+    // 冰塊平台
+    platforms.forEach(p => {
+        let grad = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.h);
+        grad.addColorStop(0, '#a5f3fc');
+        grad.addColorStop(1, '#22d3ee');
+        ctx.fillStyle = grad;
+        ctx.fillRect(p.x, p.y, p.w, p.h);
+        ctx.strokeStyle = "rgba(255,255,255,0.5)";
+        ctx.strokeRect(p.x, p.y, p.w, p.h);
     });
 
-    // 頂部固定尖刺
-    ctx.fillStyle = "#e74c3c";
-    for(let i=0; i<canvas.width; i+=20) {
+    // 冰錐
+    ctx.fillStyle = "#e0f2fe";
+    ceilingIcicles.forEach(ic => {
+        let drawY = ic.isDropping ? ic.y : 0;
         ctx.beginPath();
-        ctx.moveTo(i, 0); ctx.lineTo(i+10, 20); ctx.lineTo(i+20, 0); ctx.fill();
-    }
-
-    // 平台
-    ctx.fillStyle = "rgba(236, 240, 241, 0.8)";
-    platforms.forEach(p => ctx.fillRect(p.x, p.y, p.w, p.h));
-
-    // 隨機長度冰錐
-    ctx.fillStyle = "#bdc3c7";
-    icicles.forEach(ic => {
-        ctx.beginPath();
-        ctx.moveTo(ic.x, ic.y);
-        ctx.lineTo(ic.x + ic.w/2, ic.y + ic.len);
-        ctx.lineTo(ic.x + ic.w, ic.y);
+        ctx.moveTo(ic.x, drawY);
+        ctx.lineTo(ic.x + ic.w / 2, drawY + ic.h);
+        ctx.lineTo(ic.x + ic.w, drawY);
         ctx.fill();
+        // 冰錐的高光效果
+        ctx.fillStyle = "rgba(255,255,255,0.3)";
+        ctx.fillRect(ic.x + ic.w/3, drawY, 2, ic.h/2);
+        ctx.fillStyle = "#e0f2fe";
     });
 
-    // 主角圖片
+    // 主角
     try {
         ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
     } catch(e) {
