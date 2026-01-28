@@ -72,15 +72,42 @@ function updateHeartsUI() {
     }
 }
 
+// 簡約版愛心繪製邏輯
 function drawHeart(ctx, x, y, size, isFull) {
+    ctx.save();
+    ctx.translate(x, y - size/4); // 稍微微調重心位置
+
     ctx.beginPath();
-    ctx.moveTo(x, y + size / 4);
-    ctx.bezierCurveTo(x, y, x - size, y, x - size, y + size / 2);
-    ctx.bezierCurveTo(x - size, y + size, x, y + size * 1.5, x, y + size * 1.5);
-    ctx.bezierCurveTo(x, y + size * 1.5, x + size, y + size, x + size, y + size / 2);
-    ctx.bezierCurveTo(x + size, y, x, y, x, y + size / 4);
-    if (isFull) { ctx.fillStyle = "#ff4d4d"; ctx.fill(); }
-    else { ctx.strokeStyle = "rgba(255,255,255,0.6)"; ctx.lineWidth = 2; ctx.stroke(); }
+    // 繪製簡約愛心輪廓
+    const r = size / 2;
+    ctx.arc(-r / 2, 0, r / 2, Math.PI, 0); // 左圓頭
+    ctx.arc(r / 2, 0, r / 2, Math.PI, 0);  // 右圓頭
+    ctx.lineTo(0, r * 1.2);               // 尖角底
+    ctx.closePath();
+    
+    if (isFull) {
+        ctx.fillStyle = "#FF4D4D"; // 實心紅
+        ctx.fill();
+    } else {
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.8)"; // 空心白邊
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+    ctx.restore();
+}
+
+// 為了讓 UI 更整潔，微調 updateHeartsUI 的畫布大小
+function updateHeartsUI() {
+    heartsContainer.innerHTML = '';
+    for (let i = 0; i < maxLives; i++) {
+        const heart = document.createElement('canvas');
+        heart.width = 30;  // 稍微加寬
+        heart.height = 30; // 稍微加高
+        const hCtx = heart.getContext('2d');
+        // size 設定為 10 即可得到很精緻的小心心
+        drawHeart(hCtx, 15, 12, 10, i < lives); 
+        heartsContainer.appendChild(heart);
+    }
 }
 
 function initCeiling() {
