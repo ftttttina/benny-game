@@ -10,9 +10,9 @@
         #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 18px; pointer-events: none; text-shadow: 2px 2px 4px #000; z-index: 10; display: none; }
         
         /* 啟動選單與黑屏 */
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
-        #startBtn { padding: 15px 40px; font-size: 24px; cursor: pointer; background: #3498db; color: white; border: none; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: 0.3s; }
-        #startBtn:hover { background: #2980b9; transform: scale(1.1); }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; }
+        #startBtn { padding: 15px 40px; font-size: 24px; cursor: pointer; background: #e74c3c; color: white; border: none; border-radius: 50px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); transition: 0.3s; }
+        #startBtn:hover { background: #c0392b; transform: scale(1.1); }
         #deathScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; display: none; z-index: 30; }
     </style>
 </head>
@@ -21,7 +21,7 @@
     <div id="ui">Lives: <span id="lives">3</span> | Score: <span id="score">0</span></div>
     
     <div id="overlay">
-        <h1 style="color: white; margin-bottom: 20px; letter-spacing: 2px;">Benny's Game</h1>
+        <h1 style="color: white; margin-bottom: 20px;">Benny's Game</h1>
         <button id="startBtn">START GAME</button>
     </div>
 
@@ -37,16 +37,12 @@ const overlay = document.getElementById('overlay');
 const startBtn = document.getElementById('startBtn');
 const deathScreen = document.getElementById('deathScreen');
 
-// 遊戲參數
+// 遊戲變數
 let lives, score, gameActive, currentPlatformSpeed;
-let platforms = [];
-let icicles = []; // 存儲掉落的冰錐
-let lastIcicleTime = 0;
-const icicleInterval = 3000; // 每 3 秒掉落一次冰錐 (你可以調大這個數值來降低難度)
-
 const gravity = 0.5;
 const baseWalkSpeed = 5;
-const fallMultiplier = 0.8; // 掉落時水平速度慢 20%
+const fallMultiplier = 0.8;
+let platforms = [];
 let keys = {};
 let touchStartX = 0;
 
@@ -55,26 +51,23 @@ const player = {
     vx: 0, vy: 0, grounded: false, color: '#f1c40f'
 };
 
+// 初始化/重置遊戲
 function resetGame() {
     lives = 3;
     score = 0;
-    currentPlatformSpeed = 1.5;
+    currentPlatformSpeed = 1.5; // 初始速度
     gameActive = true;
     platforms = [];
-    icicles = [];
-    lastIcicleTime = Date.now();
     
     canvas.width = window.innerWidth > 500 ? 400 : window.innerWidth;
     canvas.height = window.innerHeight;
     
     player.x = canvas.width / 2;
     player.y = canvas.height / 2;
-    player.vy = 0;
-    player.vx = 0;
     
-    // 生成初始 6 個平台
+    // 生成初始平台
     for(let i=0; i<6; i++) {
-        spawnPlatform(canvas.height / 6 * i + 200);
+        spawnPlatform(canvas.height / 6 * i + 150);
     }
     
     document.getElementById('lives').innerText = lives;
@@ -87,9 +80,12 @@ function resetGame() {
 }
 
 function spawnPlatform(yPos) {
-    const minWidth = 70;
-    const maxWidth = 180; 
+    // 難度隨機化：平台長度隨分數增加而變短
+    const minWidth = 60;
+    const maxWidth = Math.max(minWidth, 200 - (score * 2)); 
     const pWidth = Math.random() * (maxWidth - minWidth) + minWidth;
+    
+    // 確保一定會有空隙 (Canvas 寬度 - 平台寬度)
     const maxX = canvas.width - pWidth;
     
     platforms.push({
@@ -100,16 +96,7 @@ function spawnPlatform(yPos) {
     });
 }
 
-function spawnIcicle() {
-    // 減少數量：隨機掉落 1 個冰錐
-    icicles.push({
-        x: Math.random() * (canvas.width - 20),
-        y: 20,
-        speed: 3 + Math.random() * 2 // 掉落速度
-    });
-}
-
-// 事件監聽
+// 控制邏輯
 startBtn.addEventListener('click', resetGame);
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
@@ -125,21 +112,20 @@ window.addEventListener('touchend', () => player.vx = 0);
 function update() {
     if (!gameActive) return;
 
-    // 隨時間增加難度
-    currentPlatformSpeed += 0.0003;
+    // 隨時間增加難度 (上升速度)
+    currentPlatformSpeed += 0.0005;
 
-    // 水平移動速度判定
+    // 移動邏輯
     let moveSpeed = player.grounded ? baseWalkSpeed : baseWalkSpeed * fallMultiplier;
-    
     if (keys['ArrowLeft']) player.vx = -moveSpeed;
     else if (keys['ArrowRight']) player.vx = moveSpeed;
-    else if (!('ontouchstart' in window)) player.vx *= 0.7; // 桌面摩擦力
+    else if (!('ontouchstart' in window)) player.vx *= 0.7; // 桌面端摩擦力
 
     player.vy += gravity;
     player.y += player.vy;
     player.x += player.vx;
 
-    // 邊界限制
+    // 牆壁碰撞
     if (player.x < 0) player.x = 0;
     if (player.x + player.w > canvas.width) player.x = canvas.width - player.w;
 
@@ -148,7 +134,7 @@ function update() {
     platforms.forEach((p, i) => {
         p.y -= currentPlatformSpeed;
 
-        // 碰撞檢測
+        // 碰撞檢測 (踩在平台上)
         if (player.vy > 0 && 
             player.x < p.x + p.w && player.x + player.w > p.x &&
             player.y + player.h > p.y && player.y + player.h < p.y + p.h + player.vy) {
@@ -157,6 +143,7 @@ function update() {
             player.grounded = true;
         }
 
+        // 循環生成平台
         if (p.y < -20) {
             platforms.splice(i, 1);
             spawnPlatform();
@@ -165,27 +152,7 @@ function update() {
         }
     });
 
-    // 冰錐掉落邏輯
-    let now = Date.now();
-    if (now - lastIcicleTime > icicleInterval) {
-        spawnIcicle();
-        lastIcicleTime = now;
-    }
-
-    icicles.forEach((ic, index) => {
-        ic.y += ic.speed;
-        // 冰錐撞擊玩家
-        if (ic.x < player.x + player.w &&
-            ic.x + 15 > player.x &&
-            ic.y < player.y + player.h &&
-            ic.y + 25 > player.y) {
-            icicles.splice(index, 1);
-            handleLifeLoss();
-        }
-        if (ic.y > canvas.height) icicles.splice(index, 1);
-    });
-
-    // 死亡判定 (撞頂部尖刺或掉出底端)
+    // 死亡判斷
     if (player.y <= 20 || player.y > canvas.height) {
         handleLifeLoss();
     }
@@ -197,11 +164,12 @@ function update() {
 function handleLifeLoss() {
     lives--;
     document.getElementById('lives').innerText = lives;
+    
     if (lives <= 0) {
         gameActive = false;
         showDeathEffect();
     } else {
-        // 重置位置到中間，給予短暫無敵感
+        // 扣血後閃爍重置位置
         player.y = canvas.height / 2;
         player.vy = 0;
     }
@@ -213,13 +181,13 @@ function showDeathEffect() {
         deathScreen.style.display = 'none';
         overlay.style.display = 'flex';
         ui.style.display = 'none';
-    }, 1000);
+    }, 1000); // 黑色螢幕停留 1 秒
 }
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 頂部固定尖刺
+    // 繪製頂部尖刺
     ctx.fillStyle = "#e74c3c";
     for(let i=0; i<canvas.width; i+=20) {
         ctx.beginPath();
@@ -229,16 +197,8 @@ function draw() {
 
     // 繪製平台
     ctx.fillStyle = "#ecf0f1";
-    platforms.forEach(p => ctx.fillRect(p.x, p.y, p.w, p.h));
-
-    // 繪製掉落冰錐
-    ctx.fillStyle = "#95a5a6";
-    icicles.forEach(ic => {
-        ctx.beginPath();
-        ctx.moveTo(ic.x, ic.y);
-        ctx.lineTo(ic.x + 7, ic.y + 25);
-        ctx.lineTo(ic.x + 14, ic.y);
-        ctx.fill();
+    platforms.forEach(p => {
+        ctx.fillRect(p.x, p.y, p.w, p.h);
     });
 
     // 繪製主角
