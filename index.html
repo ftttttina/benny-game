@@ -8,40 +8,38 @@
         body { margin: 0; overflow: hidden; background: #051937; font-family: 'Segoe UI', sans-serif; touch-action: none; }
         canvas { display: block; background: linear-gradient(to bottom, #051937, #004d7a, #008793); margin: 0 auto; }
         
-        /* 毛玻璃 UI 樣式 */
+        /* 毛玻璃 UI */
         #ui { position: absolute; top: 20px; left: 20px; color: white; font-size: 20px; pointer-events: none; z-index: 10; display: none; }
-        .heart { color: #00d2ff; margin-right: 5px; text-shadow: 0 0 8px #fff; }
+        .heart { color: #00d2ff; margin-right: 5px; text-shadow: 0 0 10px #fff; }
         
         #overlay { 
             position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
-            background: rgba(255, 255, 255, 0.1); 
-            backdrop-filter: blur(15px); /* 毛玻璃核心 */
-            -webkit-backdrop-filter: blur(15px);
+            background: rgba(255, 255, 255, 0.05); 
+            backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
             display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; 
-            border: 1px solid rgba(255, 255, 255, 0.2);
         }
         
-        h1 { color: white; font-size: 24px; font-weight: 300; margin-bottom: 20px; letter-spacing: 4px; }
+        h1 { color: white; font-size: 22px; font-weight: 300; margin-bottom: 25px; letter-spacing: 5px; opacity: 0.9; }
         #startBtn { 
-            padding: 10px 30px; font-size: 18px; cursor: pointer; 
-            background: rgba(255, 255, 255, 0.2); color: white; 
-            border: 1px solid rgba(255, 255, 255, 0.4); border-radius: 5px; 
-            transition: 0.3s; 
+            padding: 12px 35px; font-size: 16px; cursor: pointer; 
+            background: rgba(255, 255, 255, 0.15); color: white; 
+            border: 1px solid rgba(255, 255, 255, 0.3); border-radius: 4px; 
+            letter-spacing: 2px; transition: 0.3s; 
         }
-        #startBtn:hover { background: rgba(255, 255, 255, 0.3); }
+        #startBtn:active { transform: scale(0.95); background: rgba(255, 255, 255, 0.3); }
         
         #deathScreen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: black; display: none; z-index: 30; }
-        #levelUp { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); color: #00d2ff; font-size: 30px; display: none; z-index: 15; pointer-events: none; text-shadow: 0 0 10px white; }
+        #levelUp { position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%); color: #fff; font-size: 24px; display: none; z-index: 15; pointer-events: none; text-shadow: 0 0 15px #00d2ff; }
     </style>
 </head>
 <body>
 
     <div id="ui">
         <span id="heartContainer"></span>
-        <span style="margin-left:15px">Score: <span id="score">0</span></span>
+        <span style="margin-left:15px; font-weight: 300;">Score: <span id="score">0</span></span>
     </div>
 
-    <div id="levelUp">FREEZING FASTER!</div>
+    <div id="levelUp">FREEZING FASTER</div>
     
     <div id="overlay">
         <h1>Benny's Game</h1>
@@ -65,15 +63,29 @@ const playerImg = new Image();
 playerImg.src = 'your_face.jpg'; 
 
 let lives, score, gameActive, currentPlatformSpeed;
-const gravity = 0.5;
+const gravity = 0.45;
 const baseWalkSpeed = 5;
 const fallMultiplier = 0.8;
 let platforms = [];
-let icicles = []; // 冰錐陣列
+let icicles = [];
+let snowflakes = [];
 let keys = {};
 let touchStartX = 0;
 
 const player = { x: 0, y: 0, w: 35, h: 35, vx: 0, vy: 0, grounded: false };
+
+function initParticles() {
+    snowflakes = [];
+    for(let i = 0; i < 60; i++) {
+        snowflakes.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            r: Math.random() * 3 + 1,
+            d: Math.random() * 1, // 密度
+            v: Math.random() * 1 + 0.5 // 下落速度
+        });
+    }
+}
 
 function resetGame() {
     lives = 3; score = 0;
@@ -85,12 +97,19 @@ function resetGame() {
     canvas.width = window.innerWidth > 500 ? 400 : window.innerWidth;
     canvas.height = window.innerHeight;
     
+    initParticles();
     player.x = canvas.width / 2 - player.w / 2;
     player.y = canvas.height / 2;
     
-    // 初始化冰錐
-    for(let i=0; i<canvas.width; i+=40) {
-        icicles.push({ x: i, y: 0, w: 15, h: 40, isFalling: false, speed: 0 });
+    // 初始化隨機大小、透明度的冰錐
+    for(let i=0; i<canvas.width; i+=30) {
+        icicles.push({ 
+            x: i, y: 0, 
+            w: 10 + Math.random() * 15, 
+            h: 30 + Math.random() * 40, 
+            opacity: 0.4 + Math.random() * 0.4,
+            isFalling: false, speed: 0 
+        });
     }
 
     let lastY = 200;
@@ -104,13 +123,6 @@ function resetGame() {
     requestAnimationFrame(update);
 }
 
-function updateUI() {
-    document.getElementById('score').innerText = score;
-    let heartsHtml = '';
-    for(let i=1; i<=3; i++) heartsHtml += `<span class="heart">${i <= lives ? '♥' : '♡'}</span>`;
-    heartContainer.innerHTML = heartsHtml;
-}
-
 function spawnPlatform(yPos) {
     const minWidth = 70;
     const maxWidth = Math.max(55, 180 - (Math.floor(score/5) * 8)); 
@@ -122,9 +134,17 @@ function spawnPlatform(yPos) {
     platforms.push({ x: Math.random() * (canvas.width - pWidth), y: finalY || canvas.height, w: pWidth, h: 12 });
 }
 
+function updateUI() {
+    document.getElementById('score').innerText = score;
+    let heartsHtml = '';
+    for(let i=1; i<=3; i++) heartsHtml += `<span class="heart">${i <= lives ? '♥' : '♡'}</span>`;
+    heartContainer.innerHTML = heartsHtml;
+}
+
 startBtn.addEventListener('click', resetGame);
 window.addEventListener('keydown', e => keys[e.code] = true);
 window.addEventListener('keyup', e => keys[e.code] = false);
+
 window.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; });
 window.addEventListener('touchmove', e => {
     const diff = e.touches[0].clientX - touchStartX;
@@ -135,6 +155,13 @@ window.addEventListener('touchend', () => player.vx = 0);
 
 function update() {
     if (!gameActive) return;
+
+    // 飄雪動畫
+    snowflakes.forEach(s => {
+        s.y += s.v;
+        s.x += Math.sin(s.y / 30) * 0.5;
+        if (s.y > canvas.height) { s.y = -10; s.x = Math.random() * canvas.width; }
+    });
 
     let moveSpeed = player.grounded ? baseWalkSpeed : baseWalkSpeed * fallMultiplier;
     if (keys['ArrowLeft']) player.vx = -moveSpeed;
@@ -150,20 +177,16 @@ function update() {
 
     // 冰錐邏輯
     icicles.forEach(ic => {
-        // 隨機觸發掉落
-        if (!ic.isFalling && Math.random() < 0.005) {
+        if (!ic.isFalling && Math.random() < 0.006) {
             ic.isFalling = true;
-            ic.speed = 3 + Math.random() * 4;
+            ic.speed = 3.5 + Math.random() * 5;
         }
         if (ic.isFalling) {
             ic.y += ic.speed;
-            // 碰撞檢查 (主角被冰錐砸中)
             if (player.x < ic.x + ic.w && player.x + player.w > ic.x &&
                 player.y < ic.y + ic.h && player.y + player.h > ic.y) {
-                handleLifeLoss();
-                resetIcicle(ic);
+                handleLifeLoss(); resetIcicle(ic);
             }
-            // 掉出螢幕重置
             if (ic.y > canvas.height) resetIcicle(ic);
         }
     });
@@ -188,9 +211,9 @@ function update() {
 }
 
 function resetIcicle(ic) {
-    ic.y = 0;
-    ic.isFalling = false;
-    ic.speed = 0;
+    ic.y = 0; ic.isFalling = false; ic.speed = 0;
+    ic.w = 10 + Math.random() * 15;
+    ic.h = 30 + Math.random() * 40;
 }
 
 function handleLifeLoss() {
@@ -212,28 +235,36 @@ function showSpeedUpEffect() {
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
-    // 繪製冰錐 (一根一根的三角形)
+    // 1. 繪製雪花
+    ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
+    snowflakes.forEach(s => {
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    // 2. 繪製冰錐
     icicles.forEach(ic => {
-        ctx.fillStyle = "#a5f2f3";
+        ctx.fillStyle = `rgba(165, 242, 243, ${ic.opacity})`;
         ctx.beginPath();
         ctx.moveTo(ic.x, ic.y);
         ctx.lineTo(ic.x + ic.w / 2, ic.y + ic.h);
         ctx.lineTo(ic.x + ic.w, ic.y);
         ctx.fill();
-        // 冰錐亮邊
-        ctx.strokeStyle = "white";
+        ctx.strokeStyle = `rgba(255, 255, 255, ${ic.opacity + 0.2})`;
+        ctx.lineWidth = 1;
         ctx.stroke();
     });
 
-    // 繪製冰層平台
-    ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+    // 3. 繪製平台
     platforms.forEach(p => {
+        ctx.fillStyle = "rgba(255, 255, 255, 0.7)";
         ctx.fillRect(p.x, p.y, p.w, p.h);
-        ctx.fillStyle = "rgba(0, 210, 255, 0.3)";
-        ctx.fillRect(p.x, p.y + 8, p.w, 4); // 平台的冰層厚度感
-        ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+        ctx.fillStyle = "rgba(0, 210, 255, 0.2)";
+        ctx.fillRect(p.x, p.y + 7, p.w, 5);
     });
 
+    // 4. 繪製主角
     if (playerImg.complete && playerImg.naturalWidth !== 0) {
         ctx.drawImage(playerImg, player.x, player.y, player.w, player.h);
     } else {
